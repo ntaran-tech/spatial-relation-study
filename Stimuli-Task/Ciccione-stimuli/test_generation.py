@@ -18,11 +18,11 @@ class StimulusTests(unittest.TestCase):
     def test_saved_design_and_coordinates(self):
         with (ROOT / 'manifest.csv').open() as f:
             rows = list(csv.DictReader(f))
-        self.assertEqual(len(rows), 672)
+        self.assertEqual(len(rows), 1344)
         design = set(itertools.product(generator.COUNTS, generator.SLOPES, generator.SIGMAS))
         for block in range(1, 7):
             group = [r for r in rows if int(r['block']) == block]
-            self.assertEqual(len(group), 112)
+            self.assertEqual(len(group), 224)
             self.assertEqual({(int(r['n']), float(r['slope']), float(r['sigma'])) for r in group}, design)
         with (ROOT / 'manifest_training.csv').open() as f:
             practice = list(csv.DictReader(f))

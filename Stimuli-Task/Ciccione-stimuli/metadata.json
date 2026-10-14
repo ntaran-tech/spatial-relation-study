@@ -14,10 +14,14 @@
     0.1875
   ],
   "dot_counts": [
-    6,
+    8,
+    10,
+    12,
+    14,
+    16,
     18,
-    38,
-    66
+    20,
+    22
   ],
   "sigmas": [
     0.05,
@@ -25,9 +29,10 @@
     0.15,
     0.2
   ],
+  "dot_count_adaptation": "original study bank counts; paper used [6, 18, 38, 66]",
   "blocks": 6,
-  "trials_per_block": 112,
-  "main_trials": 672,
+  "trials_per_block": 224,
+  "main_trials": 1344,
   "practice_trials": 25,
   "bounds": [
     -0.27,

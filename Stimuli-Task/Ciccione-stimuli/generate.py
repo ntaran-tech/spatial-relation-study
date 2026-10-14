@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 SLOPES = [-0.1875, -0.125, -0.0625, 0.0, 0.0625, 0.125, 0.1875]
-COUNTS = [6, 18, 38, 66]
+COUNTS = [8, 10, 12, 14, 16, 18, 20, 22]
 SIGMAS = [0.05, 0.1, 0.15, 0.2]
 Y_MIN, Y_MAX = -0.27, 1.27
 DEFAULT_SEED = 2021101401
@@ -58,7 +58,8 @@ def generate(output, seed=DEFAULT_SEED):
                     numpy_version=np.__version__, experiment=1,
                     source='Ciccione & Dehaene (2021), Cognitive Psychology 128, 101406, sections 2.1.2–2.1.4',
                     slopes=SLOPES, dot_counts=COUNTS, sigmas=SIGMAS,
-                    blocks=6, trials_per_block=112, main_trials=len(main), practice_trials=len(practice),
+                    dot_count_adaptation="original study bank counts; paper used [6, 18, 38, 66]",
+                    blocks=6, trials_per_block=len(combinations), main_trials=len(main), practice_trials=len(practice),
                     bounds=[Y_MIN, Y_MAX], bounds_applied='after vertical centering',
                     feedback_basis='sign of observed OLS slope',
                     independently_generated_per_participant=False)

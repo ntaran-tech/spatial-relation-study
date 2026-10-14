@@ -29,7 +29,7 @@ a { color: #a5d5ff; }
 const DOT_DURATION_MS = 200;
 const ITI_MS = 500;
 const STIMULUS_SET = 'Ciccione-stimuli';
-const BLOCK_SIZE = 112;
+const BLOCK_SIZE = 224;
 const BLOCK_COUNT = 6;
 const PRACTICE_COUNT = 25;
 const params = new URLSearchParams(location.search);
@@ -196,7 +196,7 @@ async function load() {
         [mainTrials, practiceTrials] = manifests;
         if (mainTrials.length !== BLOCK_SIZE * BLOCK_COUNT || practiceTrials.length !== PRACTICE_COUNT) throw new Error('Incomplete manifests');
         pool = shuffle(practiceTrials);
-        instructions(`Dots will appear one at a time at the horizontal center, each for 200 ms. Judge whether their positions tend to rise or fall over the sequence. Wait until the sequence ends, then respond. ${mapping()} You will complete ${PRACTICE_COUNT} practice trials and ${mainTrials.length} main trials, with breaks every ${BLOCK_SIZE} main trials. Sequences last approximately 1.2–13.2 seconds; longer sequences take more time.`, beginTrial);
+        instructions(`Dots will appear one at a time at the horizontal center, each for 200 ms. Judge whether their positions tend to rise or fall over the sequence. Wait until the sequence ends, then respond. ${mapping()} You will complete ${PRACTICE_COUNT} practice trials and ${mainTrials.length} main trials, with breaks every ${BLOCK_SIZE} main trials. Sequences last approximately 1.6–4.4 seconds; longer sequences take more time.`, beginTrial);
     } catch (error) {
         phase = 'error'; message.textContent = `Unable to load stimuli: ${error.message}. Reload to try again.`;
     }
