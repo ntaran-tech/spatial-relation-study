@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temporal Trend Judgement Task</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #1a1a1a; color: white; font: 18px/1.6 Arial, sans-serif; }
+main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+#panel { max-width: 800px; text-align: center; }
+button, a { font: inherit; }
+button { padding: 10px 24px; cursor: pointer; }
+a { color: #a5d5ff; }
+#stage { position: fixed; width: min(90vw, 90vh); height: min(90vw, 90vh); left: 50%; top: 50%; transform: translate(-50%, -50%); }
+#dot { position: absolute; left: 50%; background: white; border-radius: 50%; transform: translate(-50%, -50%); }
+#prompt { position: fixed; bottom: 2vh; left: 5vw; width: 90vw; text-align: center; margin: 0; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main><section id="panel" aria-live="polite"><h1>Temporal Trend Judgement Task</h1><p id="message">Loading stimuli…</p><button id="next" hidden>Continue</button><p><a id="download" hidden>Download responses (CSV)</a></p></section></main>
+<div id="stage" hidden><div id="dot" hidden></div></div>
+<p id="prompt" hidden></p>
+<script>
+'use strict';
+const DOT_DURATION_MS = 200;
+const ITI_MS = 500;
+const params = new URLSearchParams(location.search);
+const condition = Number(params.get('C'));
+// Preserve the original C-to-key mapping; every condition now judges trend.
+const responseCode = [1, 2, 3, 4].includes(condition) ? (condition <= 2 ? 1 : 2) : (Math.random() < 0.5 ? 1 : 2);
+const upKey = responseCode === 1 ? 'Q' : 'P';
+const downKey = responseCode === 1 ? 'P' : 'Q';
+const panel = document.querySelector('#panel');
+const message = document.querySelector('#message');
+const next = document.querySelector('#next');
+const stage = document.querySelector('#stage');
+const dot = document.querySelector('#dot');
+const prompt = document.querySelector('#prompt');
+let phase = 'loading', mainTrials = [], practiceTrials = [], pool = [], trial = null;
+let training = true, mainCount = 0, recent = [], records = [], timer = null;
+let sequenceStart = 0, responseStart = 0, dotIndex = 0, timings = [];
+let nextAction = null, afterReminder = null, downloadUrl = null;
+function parseCSV(text) {
+    const rows = []; let row = [], field = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === '"') {
+            if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+            else quoted = !quoted;
+        } else if (c === ',' && !quoted) { row.push(field); field = ''; }
+        else if ((c === '\n' || c === '\r') && !quoted) {
+            if (c === '\r' && text[i + 1] === '\n') i++;
+            row.push(field); if (row.some(v => v.trim())) rows.push(row); row = []; field = '';
+        } else field += c;
+    }
+    if (quoted) throw new Error('Unclosed CSV quote');
+    if (field || row.length) { row.push(field); rows.push(row); }
+    const headers = rows.shift();
+    if (!headers) throw new Error('Empty manifest');
+    return rows.map(values => Object.fromEntries(headers.map((h, i) => [h.trim(), values[i] ?? ''])));
+}
+function prepare(rows) {
+    return rows.map(row => {
+        const x = row.x_values.split(',').map(Number), y = row.y_values.split(',').map(Number);
+        if (!row.x_values || !row.y_values || x.length !== Number(row.n) || y.length !== x.length ||
+            !x.every(Number.isFinite) || !y.every(v => Number.isFinite(v) && v >= -0.27 && v <= 1.27) ||
+            !['Trend_Up', 'Trend_Down'].includes(row.trend_category)) throw new Error('Invalid stimulus ' + row.index);
+        return {...row, points: x.map((v, i) => ({x: v, y: y[i]})).sort((a, b) => a.x - b.x)};
+    });
+}
+function shuffle(items) {
+    const result = [...items];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+function instructions(text, action, label = 'Start') {
+    phase = 'instructions'; stage.hidden = true; dot.hidden = true; prompt.hidden = true;
+    panel.hidden = false; message.textContent = text;
+    next.textContent = label; next.hidden = false; nextAction = action;
+}
+const mapping = () => `Press ${upKey} for an increasing trend; press ${downKey} for a decreasing trend.`;
+function beginTrial() {
+    if (!pool.length) {
+        if (training) {
+            training = false; recent = []; pool = shuffle(mainTrials);
+            instructions(`Practice complete. Part 1 of 4. ${mapping()}`, beginTrial);
+        } else complete();
+        return;
+    }
+    trial = pool.pop(); dotIndex = 0; timings = []; phase = 'sequence';
+    panel.hidden = true; stage.hidden = false; prompt.hidden = true;
+    // Match the generator's fixed 900 px canvas, 20 px margin and Y range.
+    const diameter = Number(trial.dot_size_px) || 11;
+    dot.style.width = dot.style.height = `${100 * diameter / 900}%`;
+    requestAnimationFrame(timestamp => { sequenceStart = timestamp; showDot(timestamp); });
+}
+function showDot(timestamp) {
+    if (phase !== 'sequence') return;
+    if (dotIndex >= trial.points.length) {
+        dot.hidden = true; responseStart = timestamp; phase = 'response';
+        prompt.textContent = mapping(); prompt.hidden = false;
+        return;
+    }
+    const y = trial.points[dotIndex].y;
+    dot.style.top = `${100 * (20 + (1 - (y + 0.27) / 1.54) * 860) / 900}%`;
+    dot.hidden = false; timings.push(timestamp - sequenceStart); dotIndex++;
+    timer = setTimeout(() => requestAnimationFrame(showDot), DOT_DURATION_MS);
+}
+function respond(key) {
+    if (phase !== 'response') return;
+    const now = performance.now();
+    const correct = key === (trial.trend_category === 'Trend_Up' ? upKey : downKey);
+    records.push({task: 'temporal_trend', sonaId: params.get('id') || '', qualtricsResponseId: params.get('ResponseID') || '',
+        trialNumber: records.length + 1, trialType: training ? 'training' : 'main', stimulusIndex: trial.index,
+        n: trial.n, slope: trial.slope, observedSlope: trial.observed_slope, noise: trial.sigma, responseCode,
+        responseKey: key, accuracy: correct, reactionTime: now - responseStart,
+        timeFromSequenceStart: now - sequenceStart, sequenceDuration: responseStart - sequenceStart,
+        dotDurationMs: DOT_DURATION_MS, dotOnsetsMs: timings.join(';')});
+    updateDownload();
+    recent.push(correct); if (!training) mainCount++;
+    phase = 'iti'; stage.hidden = true; prompt.hidden = true;
+    const proceed = () => {
+        if (!training && mainCount < mainTrials.length && mainCount % 128 === 0) {
+            instructions(`Break. Part ${Math.floor(mainCount / 128) + 1} of 4. ${mapping()}`, beginTrial, 'Continue');
+        } else beginTrial();
+    };
+    timer = setTimeout(() => {
+        if (recent.length >= 6 && recent.slice(-6).filter(v => !v).length >= 3) {
+            recent = []; afterReminder = proceed;
+            instructions(`Remember: judge whether the dots tend to move upward or downward over time. ${mapping()}`, () => afterReminder(), 'Continue');
+        } else proceed();
+    }, ITI_MS);
+}
+function updateDownload() {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    const columns = Object.keys(records[0]);
+    const escape = v => '"' + String(v ?? '').replaceAll('"', '""') + '"';
+    const csv = [columns, ...records.map(r => columns.map(c => r[c]))].map(r => r.map(escape).join(',')).join('\r\n');
+    downloadUrl = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
+    const link = document.querySelector('#download'); link.href = downloadUrl;
+    link.download = `temporal_trend_${Date.now()}.csv`; link.hidden = false;
+}
+function complete() {
+    instructions('Task complete. Thank you for participating. Download your responses below.', null);
+    phase = 'complete'; next.hidden = true;
+}
+next.addEventListener('click', () => { const action = nextAction; nextAction = null; if (action) action(); });
+document.addEventListener('keydown', e => {
+    if (e.repeat || !['p', 'q'].includes(e.key.toLowerCase())) return;
+    if (phase === 'response') { e.preventDefault(); respond(e.key.toUpperCase()); }
+});
+// A hidden tab invalidates presentation timing: replay this unrecorded trial on return.
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && ['sequence', 'response', 'iti'].includes(phase)) {
+        clearTimeout(timer);
+        if (phase !== 'iti') pool.push(trial);
+        instructions('The task paused while this tab was hidden. Continue when you are ready.', () => {
+            if (!training && mainCount > 0 && mainCount < mainTrials.length && mainCount % 128 === 0) {
+                instructions(`Part ${Math.floor(mainCount / 128) + 1} of 4. ${mapping()}`, beginTrial);
+            } else beginTrial();
+        }, 'Continue');
+    }
+});
+async function load() {
+    try {
+        const manifests = await Promise.all(['manifest.csv', 'manifest_training.csv'].map(async name => {
+            const response = await fetch(name, {cache: 'no-store'});
+            if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+            return prepare(parseCSV(await response.text()));
+        }));
+        [mainTrials, practiceTrials] = manifests;
+        if (mainTrials.length !== 512 || practiceTrials.length < 10) throw new Error('Incomplete manifests');
+        pool = shuffle(practiceTrials).slice(0, 10);
+        instructions(`Dots will appear one at a time at the horizontal center, each for 200 ms. Judge whether their positions tend to rise or fall over the sequence. Wait until the sequence ends, then respond. ${mapping()} You will complete 10 practice trials and 512 main trials, with breaks every 128 main trials.`, beginTrial);
+    } catch (error) {
+        phase = 'error'; message.textContent = `Unable to load stimuli: ${error.message}. Reload to try again.`;
+    }
+}
+load();
+</script>
+</body>
+</html>
