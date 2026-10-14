@@ -1,0 +1,39 @@
+{
+  "stimulus_set": "Ciccione-stimuli",
+  "seed": 2021101401,
+  "numpy_version": "2.3.5",
+  "experiment": 1,
+  "source": "Ciccione & Dehaene (2021), Cognitive Psychology 128, 101406, sections 2.1.2\u20132.1.4",
+  "slopes": [
+    -0.1875,
+    -0.125,
+    -0.0625,
+    0.0,
+    0.0625,
+    0.125,
+    0.1875
+  ],
+  "dot_counts": [
+    6,
+    18,
+    38,
+    66
+  ],
+  "sigmas": [
+    0.05,
+    0.1,
+    0.15,
+    0.2
+  ],
+  "blocks": 6,
+  "trials_per_block": 112,
+  "main_trials": 672,
+  "practice_trials": 25,
+  "bounds": [
+    -0.27,
+    1.27
+  ],
+  "bounds_applied": "after vertical centering",
+  "feedback_basis": "sign of observed OLS slope",
+  "independently_generated_per_participant": false
+}

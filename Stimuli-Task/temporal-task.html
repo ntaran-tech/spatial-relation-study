@@ -28,6 +28,10 @@ a { color: #a5d5ff; }
 'use strict';
 const DOT_DURATION_MS = 200;
 const ITI_MS = 500;
+const STIMULUS_SET = 'Ciccione-stimuli';
+const BLOCK_SIZE = 112;
+const BLOCK_COUNT = 6;
+const PRACTICE_COUNT = 25;
 const params = new URLSearchParams(location.search);
 const condition = Number(params.get('C'));
 // Preserve the original C-to-key mapping; every condition now judges trend.
@@ -81,6 +85,11 @@ function shuffle(items) {
     }
     return result;
 }
+function shuffledMainBlocks() {
+    // One example of every n × slope × noise combination in each block.
+    return Array.from({length: BLOCK_COUNT}, (_, i) =>
+        shuffle(mainTrials.filter(t => Number(t.block) === i + 1))).flat().reverse();
+}
 function instructions(text, action, label = 'Start') {
     feedback.hidden = true;
     phase = 'instructions'; stage.hidden = true; dot.hidden = true; prompt.hidden = true;
@@ -92,8 +101,8 @@ function beginTrial() {
     feedback.hidden = true;
     if (!pool.length) {
         if (training) {
-            training = false; recent = []; pool = shuffle(mainTrials);
-            instructions(`Practice complete. Part 1 of 4. ${mapping()}`, beginTrial);
+            training = false; recent = []; pool = shuffledMainBlocks();
+            instructions(`Practice complete. Part 1 of ${BLOCK_COUNT}. ${mapping()}`, beginTrial);
         } else complete();
         return;
     }
@@ -120,8 +129,9 @@ function respond(key) {
     if (phase !== 'response') return;
     const now = performance.now();
     const correct = key === (trial.trend_category === 'Trend_Up' ? upKey : downKey);
-    records.push({task: 'temporal_trend', sonaId: params.get('id') || '', qualtricsResponseId: params.get('ResponseID') || '',
+    records.push({task: 'temporal_trend', stimulusSet: STIMULUS_SET, sonaId: params.get('id') || '', qualtricsResponseId: params.get('ResponseID') || '',
         trialNumber: records.length + 1, trialType: training ? 'training' : 'main', stimulusIndex: trial.index,
+        stimulusBlock: trial.block, prescribedCategory: trial.prescribed_category, feedbackBasis: 'observed_slope',
         n: trial.n, slope: trial.slope, observedSlope: trial.observed_slope, noise: trial.sigma, responseCode,
         responseKey: key, accuracy: correct, reactionTime: now - responseStart,
         timeFromSequenceStart: now - sequenceStart, sequenceDuration: responseStart - sequenceStart,
@@ -134,8 +144,8 @@ function respond(key) {
     feedback.setAttribute('aria-label', correct ? 'Correct' : 'Incorrect');
     feedback.hidden = false;
     const proceed = () => {
-        if (!training && mainCount < mainTrials.length && mainCount % 128 === 0) {
-            instructions(`Break. Part ${Math.floor(mainCount / 128) + 1} of 4. ${mapping()}`, beginTrial, 'Continue');
+        if (!training && mainCount < mainTrials.length && mainCount % BLOCK_SIZE === 0) {
+            instructions(`Break. Part ${Math.floor(mainCount / BLOCK_SIZE) + 1} of ${BLOCK_COUNT}. ${mapping()}`, beginTrial, 'Continue');
         } else beginTrial();
     };
     timer = setTimeout(() => {
@@ -170,8 +180,8 @@ document.addEventListener('visibilitychange', () => {
         clearTimeout(timer);
         if (phase !== 'iti') pool.push(trial);
         instructions('The task paused while this tab was hidden. Continue when you are ready.', () => {
-            if (!training && mainCount > 0 && mainCount < mainTrials.length && mainCount % 128 === 0) {
-                instructions(`Part ${Math.floor(mainCount / 128) + 1} of 4. ${mapping()}`, beginTrial);
+            if (!training && mainCount > 0 && mainCount < mainTrials.length && mainCount % BLOCK_SIZE === 0) {
+                instructions(`Part ${Math.floor(mainCount / BLOCK_SIZE) + 1} of ${BLOCK_COUNT}. ${mapping()}`, beginTrial);
             } else beginTrial();
         }, 'Continue');
     }
@@ -179,14 +189,14 @@ document.addEventListener('visibilitychange', () => {
 async function load() {
     try {
         const manifests = await Promise.all(['manifest.csv', 'manifest_training.csv'].map(async name => {
-            const response = await fetch(name, {cache: 'no-store'});
+            const response = await fetch(`${STIMULUS_SET}/${name}`, {cache: 'no-store'});
             if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
             return prepare(parseCSV(await response.text()));
         }));
         [mainTrials, practiceTrials] = manifests;
-        if (mainTrials.length !== 512 || practiceTrials.length < 10) throw new Error('Incomplete manifests');
-        pool = shuffle(practiceTrials).slice(0, 10);
-        instructions(`Dots will appear one at a time at the horizontal center, each for 200 ms. Judge whether their positions tend to rise or fall over the sequence. Wait until the sequence ends, then respond. ${mapping()} You will complete 10 practice trials and 512 main trials, with breaks every 128 main trials.`, beginTrial);
+        if (mainTrials.length !== BLOCK_SIZE * BLOCK_COUNT || practiceTrials.length !== PRACTICE_COUNT) throw new Error('Incomplete manifests');
+        pool = shuffle(practiceTrials);
+        instructions(`Dots will appear one at a time at the horizontal center, each for 200 ms. Judge whether their positions tend to rise or fall over the sequence. Wait until the sequence ends, then respond. ${mapping()} You will complete ${PRACTICE_COUNT} practice trials and ${mainTrials.length} main trials, with breaks every ${BLOCK_SIZE} main trials. Sequences last approximately 1.2–13.2 seconds; longer sequences take more time.`, beginTrial);
     } catch (error) {
         phase = 'error'; message.textContent = `Unable to load stimuli: ${error.message}. Reload to try again.`;
     }
